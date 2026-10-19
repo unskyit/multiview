@@ -1,0 +1,82 @@
+/* 1. True AMOLED Dark Mode with Calm Blue Accent (Default) */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-app: #000000;
+  --bg-header: rgba(5, 8, 15, 0.88);
+  --bg-surface: #090d16;
+  --bg-elevated: #111726;
+  --bg-interactive: #192236;
+  --bg-viewer-stage: #000000;
+  --bg-overlay: rgba(0, 0, 0, 0.82);
+
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #7e8da4;
+
+  --border-subtle: #151d2e;
+  --border-strong: #23304a;
+
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #60a5fa;
+  --accent-on-primary: #ffffff;
+  --accent-soft: rgba(59, 130, 246, 0.14);
+  --accent-border: rgba(96, 165, 250, 0.36);
+
+  --status-success: #10b981;
+  --status-warning: #f59e0b;
+  --status-danger: #ef4444;
+  --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.85);
+}
+
+/* 2. Clean Alabaster & Calm Blue Light Mode */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-app: #f8fafc;
+  --bg-header: rgba(255, 255, 255, 0.92);
+  --bg-surface: #ffffff;
+  --bg-elevated: #f1f5f9;
+  --bg-interactive: #e2e8f0;
+  --bg-viewer-stage: #050811;
+  --bg-overlay: rgba(15, 23, 42, 0.55);
+
+  --text-primary: #090d16;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+
+  --border-subtle: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  --accent-primary: #2563eb;
+  --accent-primary-hover: #1d4ed8;
+  --accent-on-primary: #ffffff;
+  --accent-soft: rgba(37, 99, 235, 0.1);
+  --accent-border: rgba(37, 99, 235, 0.3);
+
+  --status-success: #059669;
+  --status-warning: #d97706;
+  --status-danger: #dc2626;
+  --shadow-lg: 0 14px 32px -8px rgba(15, 23, 42, 0.12);
+}
+
+/* 3. Optional Pure Monochrome (Black & White) Accent Override */
+[data-accent="mono"][data-theme="dark"] {
+  --bg-surface: #080808;
+  --bg-elevated: #121212;
+  --bg-interactive: #1f1f1f;
+  --border-subtle: #1a1a1a;
+  --border-strong: #2e2e2e;
+  --accent-primary: #ffffff;
+  --accent-primary-hover: #e2e8f0;
+  --accent-on-primary: #000000;
+  --accent-soft: rgba(255, 255, 255, 0.12);
+  --accent-border: rgba(255, 255, 255, 0.35);
+}
+
+[data-accent="mono"][data-theme="light"] {
+  --accent-primary: #090d16;
+  --accent-primary-hover: #1e293b;
+  --accent-on-primary: #ffffff;
+  --accent-soft: rgba(9, 13, 22, 0.08);
+  --accent-border: rgba(9, 13, 22, 0.28);
+}
