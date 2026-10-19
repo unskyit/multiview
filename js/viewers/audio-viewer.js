@@ -1,8 +1,9 @@
 import { createEl, clearNode, showToast } from '../utils/dom.js';
-import { createIcon, setButtonIconAndText } from '../utils/icons.js';
 import { formatDuration, formatBytes } from '../utils/format.js';
 import { getState } from '../state.js';
 import { openQueueIndex } from '../core/file-opener.js';
+import { createIcon, setButtonIconAndText } from '../utils/icons.js';
+import { attachAudioVisualizer } from '../../vendor/audio-visualizer.js';
 
 export const audioViewer = {
   mount(container, descriptor, { onMetadataUpdate } = {}) {
@@ -11,14 +12,24 @@ export const audioViewer = {
     audio.preload = 'metadata';
 
     let sleepTimerId = null;
+    let sleepMinutes = 0;
     let repeatMode = false;
 
     const artwork = createEl('div', { className: 'audio-artwork', 'aria-hidden': 'true' }, [
       createIcon('audio')
     ]);
 
+    const visualizerCanvas = createEl('canvas', {
+      className: 'audio-visualizer-canvas',
+      width: '360',
+      height: '58',
+      'aria-label': 'Real-time audio spectrum visualizer'
+    });
+
+    const detachVisualizer = attachAudioVisualizer(audio, visualizerCanvas);
+
     const titleEl = createEl('h3', {
-      style: 'font-size: 1rem; font-weight: 700; word-break: break-word;',
+      style: 'font-size: 1.05rem; font-weight: 700; word-break: break-word;',
       textContent: descriptor.name
     });
     const metaEl = createEl('p', {
@@ -27,7 +38,9 @@ export const audioViewer = {
     });
 
     const playBtn = createEl('button', {
+      type: 'button',
       className: 'btn btn-primary',
+      style: 'min-width: 128px;',
       onClick: () => {
         if (audio.paused) {
           audio.play().catch((err) => showToast('Playback error: ' + err.message, 'error'));
@@ -35,7 +48,21 @@ export const audioViewer = {
           audio.pause();
         }
       }
-    }, [createIcon('play'), createEl('span', { textContent: 'Play Audio' })]);
+    }, [createIcon('play'), createEl('span', { textContent: 'Play' })]);
+
+    const back10Btn = createEl('button', {
+      type: 'button',
+      className: 'btn btn-secondary',
+      textContent: '−10s',
+      onClick: () => { audio.currentTime = Math.max(0, audio.currentTime - 10); }
+    });
+
+    const fwd10Btn = createEl('button', {
+      type: 'button',
+      className: 'btn btn-secondary',
+      textContent: '+10s',
+      onClick: () => { audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 10); }
+    });
 
     const elapsedEl = createEl('span', { textContent: '0:00' });
     const durationEl = createEl('span', { textContent: '0:00' });
@@ -56,57 +83,74 @@ export const audioViewer = {
     });
 
     const repeatBtn = createEl('button', {
+      type: 'button',
       className: 'btn btn-secondary',
       onClick: () => {
         repeatMode = !repeatMode;
         audio.loop = repeatMode;
-        setButtonIconAndText(repeatBtn, 'repeat', `Repeat: ${repeatMode ? 'On' : 'Off'}`);
+        setButtonIconAndText(repeatBtn, 'repeat', repeatMode ? 'Repeat: On' : 'Repeat');
       }
-    }, [createIcon('repeat'), createEl('span', { textContent: 'Repeat: Off' })]);
+    }, [createIcon('repeat'), createEl('span', { textContent: 'Repeat' })]);
 
-    const speedSelect = createEl(
-      'select',
-      {
-        className: 'btn btn-secondary',
-        'aria-label': 'Audio speed',
-        onChange: (e) => {
-          audio.playbackRate = Number(e.target.value) || 1;
-        }
-      },
-      [0.75, 1, 1.25, 1.5, 2].map((rate) =>
-        createEl('option', { value: String(rate), selected: rate === 1, textContent: `${rate}x` })
-      )
-    );
+    // Native Pill-Chip Speed Selector (Zero <select> dropdowns!)
+    const speeds = [0.75, 1, 1.25, 1.5, 2];
+    const speedGroup = createEl('div', { className: 'chip-group', role: 'group', 'aria-label': 'Audio speed' });
+    const renderSpeedChips = () => {
+      clearNode(speedGroup);
+      for (const rate of speeds) {
+        speedGroup.appendChild(
+          createEl('button', {
+            type: 'button',
+            className: `chip-btn${audio.playbackRate === rate ? ' is-active' : ''}`,
+            textContent: `${rate}×`,
+            onClick: () => {
+              audio.playbackRate = rate;
+              renderSpeedChips();
+            }
+          })
+        );
+      }
+    };
+    renderSpeedChips();
 
-    const sleepSelect = createEl(
-      'select',
-      {
-        className: 'btn btn-secondary',
-        'aria-label': 'Sleep timer',
-        onChange: (e) => {
-          if (sleepTimerId) {
-            clearTimeout(sleepTimerId);
-            sleepTimerId = null;
-          }
-          const mins = Number(e.target.value);
-          if (mins > 0) {
-            sleepTimerId = setTimeout(() => {
-              audio.pause();
-              showToast(`Sleep timer (${mins}m) paused audio playback.`, 'info');
-              sleepSelect.value = '0';
-            }, mins * 60 * 1000);
-            showToast(`Sleep timer set for ${mins} minute(s).`, 'info', 2200);
-          }
-        }
-      },
-      [
-        createEl('option', { value: '0', textContent: 'Sleep: Off' }),
-        createEl('option', { value: '5', textContent: 'Sleep: 5m' }),
-        createEl('option', { value: '15', textContent: 'Sleep: 15m' }),
-        createEl('option', { value: '30', textContent: 'Sleep: 30m' }),
-        createEl('option', { value: '60', textContent: 'Sleep: 60m' })
-      ]
-    );
+    // Native Pill-Chip Sleep Timer Selector
+    const sleepOptions = [
+      { mins: 0, label: 'Sleep: Off' },
+      { mins: 5, label: '5m' },
+      { mins: 15, label: '15m' },
+      { mins: 30, label: '30m' }
+    ];
+    const sleepGroup = createEl('div', { className: 'chip-group', role: 'group', 'aria-label': 'Sleep timer' });
+    const renderSleepChips = () => {
+      clearNode(sleepGroup);
+      for (const opt of sleepOptions) {
+        sleepGroup.appendChild(
+          createEl('button', {
+            type: 'button',
+            className: `chip-btn${sleepMinutes === opt.mins ? ' is-active' : ''}`,
+            textContent: opt.label,
+            onClick: () => {
+              if (sleepTimerId) {
+                clearTimeout(sleepTimerId);
+                sleepTimerId = null;
+              }
+              sleepMinutes = opt.mins;
+              renderSleepChips();
+              if (opt.mins > 0) {
+                sleepTimerId = setTimeout(() => {
+                  audio.pause();
+                  sleepMinutes = 0;
+                  renderSleepChips();
+                  showToast(`Sleep timer (${opt.mins}m) paused audio playback.`, 'info');
+                }, opt.mins * 60 * 1000);
+                showToast(`Sleep timer set for ${opt.mins} minutes.`, 'info', 2000);
+              }
+            }
+          })
+        );
+      }
+    };
+    renderSleepChips();
 
     audio.addEventListener('loadedmetadata', () => {
       durationEl.textContent = formatDuration(audio.duration);
@@ -115,15 +159,13 @@ export const audioViewer = {
         try {
           navigator.mediaSession.metadata = new MediaMetadata({
             title: descriptor.name,
-            artist: 'MultiView Local Audio'
+            artist: 'MultiView Studio Audio'
           });
           navigator.mediaSession.setActionHandler('play', () => audio.play());
           navigator.mediaSession.setActionHandler('pause', () => audio.pause());
         } catch (_) {}
       }
-      if (typeof onMetadataUpdate === 'function') {
-        onMetadataUpdate(descriptor);
-      }
+      if (typeof onMetadataUpdate === 'function') onMetadataUpdate(descriptor);
     });
 
     audio.addEventListener('timeupdate', () => {
@@ -134,11 +176,13 @@ export const audioViewer = {
     });
 
     audio.addEventListener('play', () => {
-      setButtonIconAndText(playBtn, 'pause', 'Pause Audio');
+      artwork.classList.add('is-playing');
+      setButtonIconAndText(playBtn, 'pause', 'Pause');
     });
 
     audio.addEventListener('pause', () => {
-      setButtonIconAndText(playBtn, 'play', 'Play Audio');
+      artwork.classList.remove('is-playing');
+      setButtonIconAndText(playBtn, 'play', 'Play');
     });
 
     audio.addEventListener('ended', () => {
@@ -148,31 +192,30 @@ export const audioViewer = {
       }
     });
 
-    audio.addEventListener('error', () => {
-      showToast('This audio format or codec is not supported by your browser.', 'error');
-    });
-
     const deck = createEl('div', { className: 'audio-deck' }, [
       artwork,
       titleEl,
       metaEl,
-      createEl('div', { className: 'video-seek-row', style: 'width: 100%; max-width: 440px;' }, [
+      visualizerCanvas,
+      createEl('div', { className: 'video-seek-row', style: 'width: 100%; max-width: 420px;' }, [
         elapsedEl,
         seekInput,
         durationEl
       ]),
-      createEl('div', { className: 'viewer-toolbar', style: 'border-top: none; background: transparent;' }, [
+      createEl('div', { className: 'viewer-toolbar' }, [
+        back10Btn,
         playBtn,
-        repeatBtn,
-        speedSelect,
-        sleepSelect
-      ])
+        fwd10Btn,
+        repeatBtn
+      ]),
+      createEl('div', { className: 'viewer-toolbar' }, [speedGroup, sleepGroup])
     ]);
 
     container.appendChild(deck);
 
     return () => {
       if (sleepTimerId) clearTimeout(sleepTimerId);
+      detachVisualizer();
       audio.pause();
       audio.src = '';
     };

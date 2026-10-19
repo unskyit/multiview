@@ -1,10 +1,10 @@
+import { createEl, clearNode, showToast } from '../utils/dom.js';
 import { evaluateFilePermissions } from '../core/permissions.js';
 import { saveFileAs } from './save-file.js';
 import { copyCurrentFile } from './copy-file.js';
 import { moveCurrentFile } from './move-file.js';
 import { shareCurrentFile, openWithExternalApp } from './share-file.js';
 import { formatBytes } from '../utils/format.js';
-import { createEl, clearNode, showToast } from '../utils/dom.js';
 import { createIcon } from '../utils/icons.js';
 
 export function renderFileActionsMenu(menuEl, descriptor, { onShowFileInfo, onCloseMenu } = {}) {
@@ -12,64 +12,90 @@ export function renderFileActionsMenu(menuEl, descriptor, { onShowFileInfo, onCl
   clearNode(menuEl);
   const perms = evaluateFilePermissions(descriptor);
 
+  // Native Android Bottom Sheet Drag Handle & Header
+  menuEl.appendChild(createEl('div', { className: 'sheet-handle', 'aria-hidden': 'true' }));
+  menuEl.appendChild(
+    createEl('div', { className: 'sheet-header' }, [
+      createEl('div', { style: 'min-width: 0;' }, [
+        createEl('div', { className: 'file-row-title', textContent: descriptor ? descriptor.name : 'File Actions' }),
+        createEl('div', {
+          className: 'file-row-meta',
+          textContent: descriptor ? `${descriptor.mime || 'File'} • ${formatBytes(descriptor.size)}` : ''
+        })
+      ]),
+      createEl(
+        'button',
+        {
+          type: 'button',
+          className: 'btn-icon',
+          'aria-label': 'Close actions sheet',
+          onClick: () => {
+            if (typeof onCloseMenu === 'function') onCloseMenu();
+          }
+        },
+        [createIcon('close')]
+      )
+    ])
+  );
+
   const items = [
     {
       id: 'action-save-as',
       icon: 'download',
-      label: 'Save as…',
+      label: 'Save to Device',
       enabled: perms.canSaveAs,
-      hint: 'Download / SAF',
+      hint: 'Download',
       run: () => saveFileAs(descriptor)
     },
     {
       id: 'action-copy',
       icon: 'copy',
-      label: 'Copy to folder…',
+      label: 'Copy to Folder',
       enabled: perms.canCopy,
       hint: 'Duplicate',
       run: () => copyCurrentFile(descriptor)
     },
     {
-      id: 'action-move',
-      icon: 'move',
-      label: 'Move file…',
-      enabled: perms.canMove,
-      hint: perms.canMove ? 'Verified' : 'Read-only',
-      disabledReason: perms.explanations.move,
-      run: () => moveCurrentFile(descriptor)
-    },
-    {
       id: 'action-share',
       icon: 'share',
-      label: 'Share…',
+      label: 'Share File',
       enabled: perms.canShare,
-      hint: perms.canShare ? 'System' : 'Unavailable',
+      hint: perms.canShare ? 'System Share' : 'Unavailable',
       disabledReason: 'System file sharing is unavailable in this browser.',
       run: () => shareCurrentFile(descriptor)
     },
     {
       id: 'action-open-with',
       icon: 'external',
-      label: 'Open with…',
+      label: 'Open in External App',
       enabled: perms.canOpenWith || perms.canShare,
-      hint: perms.canOpenWith ? 'Intent' : 'Share sheet',
+      hint: perms.canOpenWith ? 'Android Intent' : 'Share Sheet',
       disabledReason: perms.explanations.openWith,
       run: () => openWithExternalApp(descriptor)
     },
     {
       id: 'action-file-info',
       icon: 'info',
-      label: 'File information',
+      label: 'Properties & Metadata',
       enabled: Boolean(descriptor),
-      hint: 'Details',
+      hint: 'EXIF / Info',
       run: () => {
         if (typeof onShowFileInfo === 'function') onShowFileInfo(descriptor);
       }
     },
     {
+      id: 'action-move',
+      icon: 'move',
+      label: 'Move File',
+      enabled: perms.canMove,
+      hint: perms.canMove ? 'Verified' : 'Read-only',
+      disabledReason: perms.explanations.move,
+      run: () => moveCurrentFile(descriptor)
+    },
+    {
       id: 'action-delete',
       icon: 'trash',
-      label: 'Delete source',
+      label: 'Delete Source File',
       enabled: perms.canDelete,
       hint: perms.canDelete ? 'Delete' : 'Read-only',
       disabledReason: perms.explanations.delete,
@@ -90,6 +116,7 @@ export function renderFileActionsMenu(menuEl, descriptor, { onShowFileInfo, onCl
     const btn = createEl(
       'button',
       {
+        type: 'button',
         className: 'action-menu-item',
         id: item.id,
         role: 'menuitem',
@@ -122,20 +149,19 @@ export function openFileInfoModal(descriptor) {
   const bodyEl = document.getElementById('modal-body');
   if (!backdrop || !titleEl || !bodyEl) return;
 
-  titleEl.textContent = 'File Information';
+  titleEl.textContent = 'Properties & Metadata';
   clearNode(bodyEl);
 
   const rows = [
     ['Filename', descriptor.name],
-    ['Extension', descriptor.extension ? `.${descriptor.extension}` : 'None'],
-    ['MIME Type', descriptor.mime || 'Unknown'],
-    ['Viewer Route', `${descriptor.category} (${descriptor.viewer})`],
+    ['Format', descriptor.mime || 'Unknown'],
+    ['Category', `${descriptor.category} (${descriptor.viewer})`],
     ['File Size', formatBytes(descriptor.size)],
-    ['Intake Source', descriptor.sourceType || 'Local'],
+    ['Source', descriptor.sourceType || 'Local Storage'],
     ['Modified', descriptor.lastModified ? new Date(descriptor.lastModified).toLocaleString() : 'Unknown']
   ];
 
-  if (descriptor.dimensions) rows.push(['Resolution', descriptor.dimensions]);
+  if (descriptor.dimensions) rows.push(['Details', descriptor.dimensions]);
   if (descriptor.duration) rows.push(['Duration', descriptor.duration]);
 
   const dl = createEl('dl', { className: 'info-dl' });

@@ -1,9 +1,9 @@
 import { createEl, clearNode, showToast } from '../utils/dom.js';
-import { createIcon, setButtonIconAndText } from '../utils/icons.js';
 import { formatDuration } from '../utils/format.js';
 import { getState } from '../state.js';
 import { getResumePosition, saveResumePosition } from '../storage/preferences.js';
 import { detectCapabilities } from '../core/capabilities.js';
+import { createIcon, setButtonIconAndText } from '../utils/icons.js';
 
 export const videoViewer = {
   mount(container, descriptor, { onMetadataUpdate } = {}) {
@@ -23,7 +23,7 @@ export const videoViewer = {
 
     const leftFeedback = createEl('div', {
       className: 'video-gesture-feedback left',
-      textContent: `-${seekStep}s`
+      textContent: `−${seekStep}s`
     });
     const rightFeedback = createEl('div', {
       className: 'video-gesture-feedback right',
@@ -32,7 +32,7 @@ export const videoViewer = {
 
     const flashFeedback = (el) => {
       el.classList.add('is-visible');
-      setTimeout(() => el.classList.remove('is-visible'), 500);
+      setTimeout(() => el.classList.remove('is-visible'), 520);
     };
 
     let lastTapTime = 0;
@@ -55,6 +55,7 @@ export const videoViewer = {
     });
 
     const playPauseBtn = createEl('button', {
+      type: 'button',
       className: 'btn btn-primary',
       onClick: () => {
         if (video.paused) {
@@ -66,18 +67,22 @@ export const videoViewer = {
     }, [createIcon('play'), createEl('span', { textContent: 'Play' })]);
 
     const backStepBtn = createEl('button', {
+      type: 'button',
       className: 'btn btn-secondary',
-      textContent: `-${seekStep}s`,
+      textContent: `−${seekStep}s`,
       onClick: () => {
         video.currentTime = Math.max(0, video.currentTime - seekStep);
+        flashFeedback(leftFeedback);
       }
     });
 
     const fwdStepBtn = createEl('button', {
+      type: 'button',
       className: 'btn btn-secondary',
       textContent: `+${seekStep}s`,
       onClick: () => {
         video.currentTime = Math.min(video.duration || 0, video.currentTime + seekStep);
+        flashFeedback(rightFeedback);
       }
     });
 
@@ -99,39 +104,47 @@ export const videoViewer = {
       }
     });
 
-    const speedSelect = createEl(
-      'select',
-      {
-        className: 'btn btn-secondary',
-        'aria-label': 'Playback speed',
-        onChange: (e) => {
-          video.playbackRate = Number(e.target.value) || 1;
-        }
-      },
-      [0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) =>
-        createEl('option', {
-          value: String(rate),
-          selected: rate === 1,
-          textContent: `${rate}x`
-        })
-      )
-    );
+    // Native Pill-Chip Speed Selector (Zero <select> dropdowns!)
+    const speeds = [0.5, 1, 1.25, 1.5, 2];
+    const speedGroup = createEl('div', { className: 'chip-group', role: 'group', 'aria-label': 'Playback speed' });
+    const renderSpeedChips = () => {
+      clearNode(speedGroup);
+      for (const rate of speeds) {
+        speedGroup.appendChild(
+          createEl('button', {
+            type: 'button',
+            className: `chip-btn${video.playbackRate === rate ? ' is-active' : ''}`,
+            textContent: `${rate}×`,
+            onClick: () => {
+              video.playbackRate = rate;
+              renderSpeedChips();
+            }
+          })
+        );
+      }
+    };
+    renderSpeedChips();
 
-    const fitModes = ['contain', 'cover', 'fill'];
+    const fitModes = [
+      { id: 'contain', label: 'Fit' },
+      { id: 'cover', label: 'Crop' },
+      { id: 'fill', label: 'Stretch' }
+    ];
     let fitIdx = 0;
     const fitBtn = createEl('button', {
+      type: 'button',
       className: 'btn btn-secondary',
-      textContent: 'Fit: Contain',
+      textContent: 'Aspect: Fit',
       onClick: () => {
         fitIdx = (fitIdx + 1) % fitModes.length;
-        const mode = fitModes[fitIdx];
-        video.dataset.fit = mode;
-        fitBtn.textContent = `Fit: ${mode.charAt(0).toUpperCase() + mode.slice(1)}`;
+        video.dataset.fit = fitModes[fitIdx].id;
+        fitBtn.textContent = `Aspect: ${fitModes[fitIdx].label}`;
       }
     });
 
     const caps = detectCapabilities();
     const pipBtn = createEl('button', {
+      type: 'button',
       className: 'btn btn-secondary',
       disabled: !caps.hasPictureInPicture,
       onClick: async () => {
@@ -142,12 +155,13 @@ export const videoViewer = {
             await video.requestPictureInPicture();
           }
         } catch (_) {
-          showToast('Picture-in-Picture unavailable for this video.', 'warning');
+          showToast('Picture-in-Picture unavailable.', 'warning');
         }
       }
     }, [createIcon('pip'), createEl('span', { textContent: 'PiP' })]);
 
     const fsBtn = createEl('button', {
+      type: 'button',
       className: 'btn btn-secondary',
       'aria-label': 'Fullscreen video',
       onClick: () => {
@@ -172,9 +186,7 @@ export const videoViewer = {
           showToast(`Resumed at ${formatDuration(savedPos)}`, 'info', 2200);
         }
       }
-      if (typeof onMetadataUpdate === 'function') {
-        onMetadataUpdate(descriptor);
-      }
+      if (typeof onMetadataUpdate === 'function') onMetadataUpdate(descriptor);
     });
 
     video.addEventListener('timeupdate', () => {
@@ -187,30 +199,24 @@ export const videoViewer = {
       }
     });
 
-    video.addEventListener('play', () => {
-      setButtonIconAndText(playPauseBtn, 'pause', 'Pause');
-    });
-
-    video.addEventListener('pause', () => {
-      setButtonIconAndText(playPauseBtn, 'play', 'Play');
-    });
-
+    video.addEventListener('play', () => setButtonIconAndText(playPauseBtn, 'pause', 'Pause'));
+    video.addEventListener('pause', () => setButtonIconAndText(playPauseBtn, 'play', 'Play'));
     video.addEventListener('error', () => {
-      showToast('This video codec or container is not supported by your device decoder.', 'error', 5000);
+      showToast('This video codec is not supported by your device decoder.', 'error', 5000);
     });
 
     videoWrap.append(video, leftFeedback, rightFeedback);
     const controlsBar = createEl('div', { className: 'video-controls-bar' }, [
       createEl('div', { className: 'video-seek-row' }, [elapsedLabel, seekSlider, durationLabel]),
       createEl('div', { className: 'viewer-toolbar' }, [
-        playPauseBtn,
         backStepBtn,
+        playPauseBtn,
         fwdStepBtn,
-        speedSelect,
         fitBtn,
         pipBtn,
         fsBtn
-      ])
+      ]),
+      createEl('div', { className: 'viewer-toolbar' }, [speedGroup])
     ]);
 
     container.append(videoWrap, controlsBar);

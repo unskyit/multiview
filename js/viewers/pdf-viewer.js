@@ -1,16 +1,19 @@
 import { createEl, clearNode } from '../utils/dom.js';
 import { createIcon } from '../utils/icons.js';
+import { inspectPdfDocument } from '../../vendor/pdf-inspector.js';
 
 export const pdfViewer = {
-  mount(container, descriptor) {
+  mount(container, descriptor, { onMetadataUpdate } = {}) {
     clearNode(container);
     const url = descriptor.blobUrl || '';
 
+    const metaBadge = createEl('span', {
+      className: 'status-pill',
+      textContent: 'PDF Document'
+    });
+
     const headerBar = createEl('div', { className: 'text-viewer-header' }, [
-      createEl('span', {
-        className: 'viewer-file-sub',
-        textContent: 'Local PDF Document Viewer'
-      }),
+      metaBadge,
       createEl('div', { className: 'header-actions' }, [
         createEl('a', {
           className: 'btn btn-secondary',
@@ -33,6 +36,13 @@ export const pdfViewer = {
     });
 
     container.append(headerBar, frame);
+
+    (async () => {
+      const info = await inspectPdfDocument(descriptor.file);
+      metaBadge.textContent = `PDF v${info.version} • ${info.pageCount} page(s)`;
+      descriptor.dimensions = `${info.pageCount} page(s)`;
+      if (typeof onMetadataUpdate === 'function') onMetadataUpdate(descriptor);
+    })();
 
     return () => {
       frame.src = 'about:blank';

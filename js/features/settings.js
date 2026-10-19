@@ -1,15 +1,10 @@
 import { getState } from '../state.js';
 import { updatePreferences, resetPreferences } from '../storage/preferences.js';
 import { clearHistory } from '../storage/history.js';
-import { openInstallInstructionsModal } from './install-prompt.js';
-import { showToast, clearNode } from '../utils/dom.js';
+import { showToast, clearNode, qsa } from '../utils/dom.js';
 import { createIcon } from '../utils/icons.js';
+import { openInstallInstructionsModal } from './install-prompt.js';
 
-/**
- * Applies Dark (True AMOLED #000000) or Light (#ffffff) theme,
- * updates the Calm Blue vs. Monochrome accent attribute, and dynamically
- * updates <meta name="theme-color"> so the Android system status bar matches immediately.
- */
 export function applyThemeAndAccent(theme, accent = 'blue') {
   const normalizedTheme = theme === 'light' ? 'light' : 'dark';
   const normalizedAccent = accent === 'mono' ? 'mono' : 'blue';
@@ -50,46 +45,53 @@ export function initSettingsControls() {
     syncSettingsForm();
   });
 
-  const themeSelect = document.getElementById('setting-theme');
-  const accentSelect = document.getElementById('setting-accent');
-  const seekSelect = document.getElementById('setting-seek-step');
-  const historyCheckbox = document.getElementById('setting-remember-history');
-  const resumeCheckbox = document.getElementById('setting-resume-playback');
+  // Pill Chip Listeners (No <select> dropdowns!)
+  qsa('[data-pref-theme]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const updated = updatePreferences({ theme: btn.dataset.prefTheme });
+      applyThemeAndAccent(updated.theme, updated.accent);
+      syncSettingsForm();
+    });
+  });
+
+  qsa('[data-pref-accent]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const updated = updatePreferences({ accent: btn.dataset.prefAccent });
+      applyThemeAndAccent(updated.theme, updated.accent);
+      syncSettingsForm();
+    });
+  });
+
+  qsa('[data-pref-seek]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const sec = Number(btn.dataset.prefSeek) || 10;
+      updatePreferences({ seekStepSeconds: sec });
+      syncSettingsForm();
+      showToast(`Double-tap seek set to ${sec}s`, 'info', 1800);
+    });
+  });
+
+  const historySwitch = document.getElementById('setting-remember-history');
+  const resumeSwitch = document.getElementById('setting-resume-playback');
   const clearHistoryBtn = document.getElementById('btn-clear-history');
   const resetSettingsBtn = document.getElementById('btn-reset-settings');
   const showInstallHelpBtn = document.getElementById('btn-settings-install-help');
 
-  themeSelect?.addEventListener('change', (e) => {
-    const updated = updatePreferences({ theme: e.target.value });
-    applyThemeAndAccent(updated.theme, updated.accent);
+  historySwitch?.addEventListener('click', () => {
+    const next = historySwitch.getAttribute('aria-checked') !== 'true';
+    updatePreferences({ rememberHistory: next });
+    syncSettingsForm();
   });
 
-  accentSelect?.addEventListener('change', (e) => {
-    const updated = updatePreferences({ accent: e.target.value });
-    applyThemeAndAccent(updated.theme, updated.accent);
-    showToast(
-      updated.accent === 'mono' ? 'Switched to Pure Monochrome (Black & White).' : 'Switched to Calm Blue accent.',
-      'info',
-      2000
-    );
-  });
-
-  seekSelect?.addEventListener('change', (e) => {
-    updatePreferences({ seekStepSeconds: Number(e.target.value) || 10 });
-    showToast(`Double-tap seek interval set to ${e.target.value}s.`, 'info', 2000);
-  });
-
-  historyCheckbox?.addEventListener('change', (e) => {
-    updatePreferences({ rememberHistory: Boolean(e.target.checked) });
-  });
-
-  resumeCheckbox?.addEventListener('change', (e) => {
-    updatePreferences({ resumePlayback: Boolean(e.target.checked) });
+  resumeSwitch?.addEventListener('click', () => {
+    const next = resumeSwitch.getAttribute('aria-checked') !== 'true';
+    updatePreferences({ resumePlayback: next });
+    syncSettingsForm();
   });
 
   clearHistoryBtn?.addEventListener('click', () => {
     clearHistory();
-    showToast('Cleared recent file history and playback positions.', 'info');
+    showToast('Cleared recent history and playback positions.', 'info');
   });
 
   resetSettingsBtn?.addEventListener('click', () => {
@@ -109,15 +111,21 @@ export function initSettingsControls() {
 export function syncSettingsForm() {
   const prefs = getState().preferences;
   if (!prefs) return;
-  const themeSelect = document.getElementById('setting-theme');
-  const accentSelect = document.getElementById('setting-accent');
-  const seekSelect = document.getElementById('setting-seek-step');
-  const historyCheckbox = document.getElementById('setting-remember-history');
-  const resumeCheckbox = document.getElementById('setting-resume-playback');
 
-  if (themeSelect) themeSelect.value = prefs.theme;
-  if (accentSelect) accentSelect.value = prefs.accent || 'blue';
-  if (seekSelect) seekSelect.value = String(prefs.seekStepSeconds);
-  if (historyCheckbox) historyCheckbox.checked = Boolean(prefs.rememberHistory);
-  if (resumeCheckbox) resumeCheckbox.checked = Boolean(prefs.resumePlayback);
+  qsa('[data-pref-theme]').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.prefTheme === prefs.theme);
+  });
+
+  qsa('[data-pref-accent]').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.prefAccent === (prefs.accent || 'blue'));
+  });
+
+  qsa('[data-pref-seek]').forEach((btn) => {
+    btn.classList.toggle('is-active', Number(btn.dataset.prefSeek) === Number(prefs.seekStepSeconds));
+  });
+
+  const historySwitch = document.getElementById('setting-remember-history');
+  const resumeSwitch = document.getElementById('setting-resume-playback');
+  if (historySwitch) historySwitch.setAttribute('aria-checked', prefs.rememberHistory ? 'true' : 'false');
+  if (resumeSwitch) resumeSwitch.setAttribute('aria-checked', prefs.resumePlayback ? 'true' : 'false');
 }

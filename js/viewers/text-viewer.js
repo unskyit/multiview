@@ -1,19 +1,17 @@
 import { createEl, clearNode, showToast } from '../utils/dom.js';
-import { createIcon } from '../utils/icons.js';
 import { APP_CONFIG } from '../config.js';
 import { formatBytes } from '../utils/format.js';
-
-function parseCsvRows(text, delimiter = ',') {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  return lines.slice(0, 500).map((line) => line.split(delimiter).map((cell) => cell.trim()));
-}
+import { createIcon } from '../utils/icons.js';
+import { parseStructuredCsv } from '../../vendor/csv-parser.js';
+import { renderMarkdownToDom } from '../../vendor/markdown-parser.js';
 
 export const textViewer = {
   mount(container, descriptor) {
     clearNode(container);
     let isCancelled = false;
     let rawText = '';
-    let fontSizeRem = 0.82;
+    let fontSizeRem = 0.84;
+    let markdownPreview = descriptor.subtype === 'markdown';
 
     const searchInput = createEl('input', {
       type: 'search',
@@ -25,6 +23,7 @@ export const textViewer = {
     const matchBadge = createEl('span', { className: 'status-pill', textContent: 'Loading...' });
 
     const fontDownBtn = createEl('button', {
+      type: 'button',
       className: 'btn btn-secondary',
       textContent: 'A−',
       'aria-label': 'Decrease text size',
@@ -35,6 +34,7 @@ export const textViewer = {
     });
 
     const fontUpBtn = createEl('button', {
+      type: 'button',
       className: 'btn btn-secondary',
       textContent: 'A+',
       'aria-label': 'Increase text size',
@@ -45,18 +45,11 @@ export const textViewer = {
     });
 
     const copyBtn = createEl('button', {
+      type: 'button',
       className: 'btn btn-secondary',
       onClick: async () => {
         try {
-          if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(rawText);
-          } else {
-            const ta = createEl('textarea', { value: rawText });
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-          }
+          await navigator.clipboard.writeText(rawText);
           showToast('Copied text to clipboard.', 'info', 2200);
         } catch (_) {
           showToast('Clipboard access was denied.', 'error');
@@ -68,8 +61,16 @@ export const textViewer = {
     const preEl = createEl('pre', { className: 'text-content-pre', textContent: 'Reading local file...' });
     contentHost.appendChild(preEl);
 
-    const renderFilteredText = (query = '') => {
+    const renderContent = (query = '') => {
       const q = query.trim().toLowerCase();
+      if (descriptor.subtype === 'markdown' && markdownPreview && !q) {
+        clearNode(contentHost);
+        contentHost.appendChild(renderMarkdownToDom(rawText));
+        matchBadge.textContent = 'Markdown';
+        return;
+      }
+      clearNode(contentHost);
+      contentHost.appendChild(preEl);
       if (!q) {
         preEl.textContent = rawText;
         const lineCount = rawText ? rawText.split(/\r?\n/).length : 0;
@@ -82,11 +83,25 @@ export const textViewer = {
       matchBadge.textContent = `${matched.length} matches`;
     };
 
-    searchInput.addEventListener('input', () => renderFilteredText(searchInput.value));
+    searchInput.addEventListener('input', () => renderContent(searchInput.value));
+
+    const rightControls = [fontDownBtn, fontUpBtn, copyBtn];
+    if (descriptor.subtype === 'markdown') {
+      const modeToggle = createEl('button', {
+        type: 'button',
+        className: 'btn btn-secondary',
+        textContent: 'Raw / Preview',
+        onClick: () => {
+          markdownPreview = !markdownPreview;
+          renderContent(searchInput.value);
+        }
+      });
+      rightControls.unshift(modeToggle);
+    }
 
     const header = createEl('div', { className: 'text-viewer-header' }, [
       createEl('div', { className: 'header-actions', style: 'flex: 1 1 180px;' }, [searchInput, matchBadge]),
-      createEl('div', { className: 'header-actions' }, [fontDownBtn, fontUpBtn, copyBtn])
+      createEl('div', { className: 'header-actions' }, rightControls)
     ]);
 
     container.append(header, contentHost);
@@ -113,7 +128,7 @@ export const textViewer = {
 
         if (descriptor.subtype === 'csv') {
           const delim = descriptor.extension === 'tsv' ? '\t' : ',';
-          const rows = parseCsvRows(rawText, delim);
+          const rows = parseStructuredCsv(rawText, delim);
           if (rows.length > 0) {
             const tableWrap = createEl('div', { className: 'csv-table-wrap' });
             const table = createEl('table', { className: 'csv-table' });
@@ -140,10 +155,10 @@ export const textViewer = {
           }
         }
 
-        renderFilteredText('');
+        renderContent('');
         if (isPartial) {
           showToast(
-            `Showing first ${formatBytes(maxBytes)} of ${formatBytes(descriptor.file.size)} to preserve memory.`,
+            `Showing first ${formatBytes(maxBytes)} of ${formatBytes(descriptor.file.size)}.`,
             'info',
             4500
           );

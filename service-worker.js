@@ -1,10 +1,4 @@
-/**
- * MultiView Service Worker (v2.0.0)
- * Caches the complete static application shell for 100% offline execution
- * and intercepts Web Share Target POST requests without persisting private media to disk.
- */
-const CACHE_VERSION = 'multiview-shell-v2.0.0';
-
+const CACHE_NAME = 'multiview-shell-v3.0.0';
 const APP_SHELL_ASSETS = [
   './',
   './index.html',
@@ -25,149 +19,107 @@ const APP_SHELL_ASSETS = [
   './css/viewers.css',
   './css/dialogs.css',
   './css/responsive.css',
+  './vendor/exif-parser.js',
+  './vendor/markdown-parser.js',
+  './vendor/csv-parser.js',
+  './vendor/pdf-inspector.js',
+  './vendor/audio-visualizer.js',
   './js/app.js',
   './js/config.js',
-  './js/router.js',
   './js/state.js',
+  './js/router.js',
   './js/events.js',
-  './js/utils/icons.js',
-  './js/utils/dom.js',
-  './js/utils/errors.js',
-  './js/utils/file-types.js',
-  './js/utils/format.js',
-  './js/utils/cleanup.js',
-  './js/core/file-opener.js',
   './js/core/file-intake.js',
+  './js/core/file-opener.js',
   './js/core/viewer-registry.js',
   './js/core/capabilities.js',
   './js/core/permissions.js',
+  './js/adapters/web-adapter.js',
+  './js/adapters/android-bridge.js',
   './js/viewers/image-viewer.js',
   './js/viewers/video-viewer.js',
   './js/viewers/audio-viewer.js',
   './js/viewers/pdf-viewer.js',
   './js/viewers/text-viewer.js',
   './js/viewers/unsupported-viewer.js',
-  './js/features/file-actions.js',
   './js/features/save-file.js',
-  './js/features/move-file.js',
   './js/features/copy-file.js',
+  './js/features/move-file.js',
   './js/features/share-file.js',
+  './js/features/file-actions.js',
   './js/features/recent-files.js',
-  './js/features/settings.js',
   './js/features/install-prompt.js',
+  './js/features/settings.js',
   './js/storage/preferences.js',
   './js/storage/history.js',
-  './js/adapters/web-adapter.js',
-  './js/adapters/android-bridge.js'
+  './js/utils/dom.js',
+  './js/utils/icons.js',
+  './js/utils/file-types.js',
+  './js/utils/format.js',
+  './js/utils/errors.js',
+  './js/utils/cleanup.js'
 ];
 
-const pendingSharedPayloads = new Map();
-
-function pruneExpiredShares() {
-  const now = Date.now();
-  for (const [id, entry] of pendingSharedPayloads.entries()) {
-    if (now - entry.timestamp > 60000) {
-      pendingSharedPayloads.delete(id);
-    }
-  }
-}
+const sharedPayloadQueue = new Map();
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_VERSION).then((cache) => cache.addAll(APP_SHELL_ASSETS))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL_ASSETS)).then(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    (async () => {
-      const keys = await caches.keys();
-      await Promise.all(
-        keys
-          .filter((key) => key.startsWith('multiview-shell-') && key !== CACHE_VERSION)
-          .map((key) => caches.delete(key))
-      );
-      await self.clients.claim();
-    })()
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
+    ).then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('message', (event) => {
-  if (!event.data || typeof event.data !== 'object') return;
-  if (event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-    return;
-  }
-  if (event.data.type === 'CLAIM_SHARED_FILES' && event.source) {
-    pruneExpiredShares();
-    const payload = pendingSharedPayloads.get(event.data.token);
-    if (payload) {
-      pendingSharedPayloads.delete(event.data.token);
-      event.source.postMessage({
-        type: 'SHARED_FILES_PAYLOAD',
-        files: payload.files,
-        meta: payload.meta
-      });
-    } else {
-      event.source.postMessage({
-        type: 'SHARED_FILES_EMPTY',
-        reason: 'No pending shared files found or session token expired.'
-      });
-    }
+  const data = event.data;
+  if (!data || data.type !== 'CLAIM_SHARED_FILES') return;
+  const token = data.token;
+  const payload = sharedPayloadQueue.get(token);
+  if (payload) {
+    sharedPayloadQueue.delete(token);
+    event.source?.postMessage({ type: 'SHARED_FILES_PAYLOAD', token, files: payload });
+  } else {
+    event.source?.postMessage({ type: 'SHARED_FILES_EMPTY', token, reason: 'Shared session expired.' });
   }
 });
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-
-  if (
-    event.request.method === 'POST' &&
-    url.origin === self.location.origin &&
-    url.searchParams.has('share-target')
-  ) {
-    event.respondWith(handleShareTargetPost(event.request));
+  if (event.request.method === 'POST' && url.searchParams.has('share-target')) {
+    event.respondWith(
+      (async () => {
+        try {
+          const formData = await event.request.formData();
+          const files = formData.getAll('shared_files').filter((f) => f && typeof f.size === 'number');
+          const token = 'share_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+          sharedPayloadQueue.set(token, files);
+          setTimeout(() => sharedPayloadQueue.delete(token), 60000);
+          return Response.redirect(`./index.html?share-target=1&token=${encodeURIComponent(token)}`, 303);
+        } catch (_) {
+          return Response.redirect('./index.html?share-error=1', 303);
+        }
+      })()
+    );
     return;
   }
 
-  if (event.request.method !== 'GET' || url.origin !== self.location.origin) {
-    return;
-  }
-  if (url.protocol === 'blob:' || url.protocol === 'content:') {
-    return;
-  }
+  if (event.request.method !== 'GET') return;
 
   event.respondWith(
-    (async () => {
-      const cache = await caches.open(CACHE_VERSION);
-      const cached = await cache.match(event.request, { ignoreSearch: true });
+    caches.match(event.request).then((cached) => {
       if (cached) return cached;
-      try {
-        return await fetch(event.request);
-      } catch (err) {
+      return fetch(event.request).catch(() => {
         if (event.request.mode === 'navigate') {
-          return (await cache.match('./index.html')) || (await cache.match('./offline.html'));
+          return caches.match('./offline.html');
         }
-        throw err;
-      }
-    })()
+        return new Response('Offline', { status: 503 });
+      });
+    })
   );
 });
-
-async function handleShareTargetPost(request) {
-  try {
-    const formData = await request.formData();
-    const files = formData.getAll('shared_files').filter((item) => item instanceof File && item.size >= 0);
-    const meta = {
-      title: formData.get('title') || '',
-      text: formData.get('text') || '',
-      url: formData.get('url') || ''
-    };
-    const token = `share_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    pruneExpiredShares();
-    pendingSharedPayloads.set(token, { files, meta, timestamp: Date.now() });
-    return Response.redirect(`./index.html?share-target=1&token=${encodeURIComponent(token)}`, 303);
-  } catch (_) {
-    return Response.redirect('./index.html?share-error=invalid_payload', 303);
-  }
-}

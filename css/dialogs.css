@@ -1,37 +1,76 @@
-.dropdown-wrapper {
-  position: relative;
+/* Native Android Slide-Up Bottom Sheet for Actions (NEVER crops on mobile!) */
+.action-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 82;
+  background: var(--bg-overlay);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-spring);
+}
+
+.action-sheet-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .action-menu {
-  position: absolute;
+  position: fixed;
+  left: 0;
   right: 0;
-  top: calc(100% + 6px);
-  z-index: 60;
-  width: min(250px, calc(100vw - 24px));
+  bottom: 0;
+  z-index: 85;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
   background: var(--bg-surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
+  border-top: 1px solid var(--border-strong);
+  border-radius: 1.5rem 1.5rem 0 0;
   box-shadow: var(--shadow-lg);
-  padding: 0.35rem;
-  display: none;
+  padding: 0.65rem 1rem calc(var(--safe-bottom) + 1.25rem);
+  display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0.25rem;
+  transform: translateY(105%);
+  pointer-events: none;
+  transition: transform var(--transition-spring);
 }
 
 .action-menu.is-open {
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.sheet-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--border-strong);
+  margin: 0.25rem auto 0.65rem;
+}
+
+.sheet-header {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.4rem 0.65rem;
+  margin-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .action-menu-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.75rem;
   width: 100%;
-  min-height: 40px;
-  padding: 0.4rem 0.65rem;
-  border-radius: var(--radius-xs);
-  font-size: 0.82rem;
+  min-height: 48px;
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-weight: 500;
   text-align: left;
   color: var(--text-primary);
 }
@@ -39,7 +78,7 @@
 .action-menu-item-left {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
   min-width: 0;
 }
 
@@ -48,21 +87,21 @@
 }
 
 .action-menu-item[aria-disabled="true"] {
-  opacity: 0.45;
-  cursor: not-allowed;
+  opacity: 0.42;
 }
 
+/* Modal Dialog */
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 90;
   background: var(--bg-overlay);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   display: none;
   align-items: center;
   justify-content: center;
-  padding: var(--space-3);
+  padding: var(--space-4);
 }
 
 .modal-backdrop.is-open {
@@ -76,12 +115,12 @@
   overflow-y: auto;
   background: var(--bg-surface);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
-  padding: var(--space-4);
+  padding: var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
 .modal-header {
@@ -89,15 +128,15 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding-bottom: 0.5rem;
+  padding-bottom: 0.65rem;
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .info-dl {
   display: grid;
   grid-template-columns: minmax(95px, 36%) minmax(0, 1fr);
-  gap: 0.45rem 0.75rem;
-  font-size: 0.82rem;
+  gap: 0.55rem 0.85rem;
+  font-size: 0.84rem;
 }
 
 .info-dl dt {
@@ -113,14 +152,14 @@
 
 .toast-region {
   position: fixed;
-  bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + 10px);
-  right: var(--space-3);
-  left: var(--space-3);
-  z-index: 90;
+  bottom: calc(var(--safe-bottom) + 18px);
+  right: var(--space-4);
+  left: var(--space-4);
+  z-index: 95;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.45rem;
   pointer-events: none;
 }
 
@@ -128,15 +167,16 @@
   pointer-events: auto;
   max-width: 420px;
   width: 100%;
-  padding: 0.65rem 0.85rem;
-  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-full);
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
   color: var(--text-primary);
   box-shadow: var(--shadow-lg);
-  font-size: 0.82rem;
+  font-size: 0.84rem;
+  font-weight: 500;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.6rem;
+  gap: 0.65rem;
 }

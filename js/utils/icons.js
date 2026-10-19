@@ -5,6 +5,11 @@
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export const ICON_PATHS = Object.freeze({
+  menu: [
+    ['line', { x1: '3', y1: '6', x2: '21', y2: '6' }],
+    ['line', { x1: '3', y1: '12', x2: '21', y2: '12' }],
+    ['line', { x1: '3', y1: '18', x2: '16', y2: '18' }]
+  ],
   home: [
     ['path', { d: 'M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5.5v-6h-5v6H4a1 1 0 0 1-1-1v-9.5z' }]
   ],

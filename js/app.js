@@ -4,21 +4,21 @@ import { initRouter, navigateTo } from './router.js';
 import { loadPreferences } from './storage/preferences.js';
 import { loadHistory } from './storage/history.js';
 import { registerViewer, getViewer } from './core/viewer-registry.js';
+import { openFiles } from './core/file-opener.js';
+import { pickFilesFromWeb } from './adapters/web-adapter.js';
+import { initFileIntake, createDiagnosticSampleFile } from './core/file-intake.js';
 import { imageViewer } from './viewers/image-viewer.js';
 import { videoViewer } from './viewers/video-viewer.js';
 import { audioViewer } from './viewers/audio-viewer.js';
 import { pdfViewer } from './viewers/pdf-viewer.js';
 import { textViewer } from './viewers/text-viewer.js';
 import { unsupportedViewer } from './viewers/unsupported-viewer.js';
-import { initFileIntake, createDiagnosticSampleFile } from './core/file-intake.js';
-import { openFiles } from './core/file-opener.js';
-import { pickFilesFromWeb } from './adapters/web-adapter.js';
 import { renderFileActionsMenu, openFileInfoModal } from './features/file-actions.js';
 import { renderRecentAndCategoryLists } from './features/recent-files.js';
-import { initSettingsControls } from './features/settings.js';
 import { initInstallPrompt, triggerInstallFlow } from './features/install-prompt.js';
-import { formatBytes } from './utils/format.js';
+import { initSettingsControls } from './features/settings.js';
 import { qsa, clearNode, showToast } from './utils/dom.js';
+import { formatBytes } from './utils/format.js';
 import { createIcon } from './utils/icons.js';
 
 registerViewer('image', imageViewer);
@@ -27,6 +27,24 @@ registerViewer('audio', audioViewer);
 registerViewer('pdf', pdfViewer);
 registerViewer('text', textViewer);
 registerViewer('unsupported', unsupportedViewer);
+
+function closeActionSheet() {
+  const actionMenu = document.getElementById('file-action-menu');
+  const sheetBackdrop = document.getElementById('action-sheet-backdrop');
+  const menuToggleBtn = document.getElementById('btn-file-actions-toggle');
+  actionMenu?.classList.remove('is-open');
+  sheetBackdrop?.classList.remove('is-open');
+  menuToggleBtn?.setAttribute('aria-expanded', 'false');
+}
+
+function closeNavDrawer() {
+  const drawer = document.getElementById('app-nav-drawer');
+  const backdrop = document.getElementById('drawer-backdrop');
+  const toggleBtn = document.getElementById('btn-drawer-toggle');
+  drawer?.classList.remove('is-open');
+  backdrop?.classList.remove('is-open');
+  toggleBtn?.setAttribute('aria-expanded', 'false');
+}
 
 function mountActiveViewer(descriptor) {
   const stage = document.getElementById('viewer-stage');
@@ -42,7 +60,7 @@ function mountActiveViewer(descriptor) {
     if (nameEl) nameEl.textContent = desc.name;
     if (subEl) {
       const parts = [
-        desc.mime || 'unknown',
+        desc.mime || 'File',
         formatBytes(desc.size),
         desc.dimensions || null,
         desc.duration || null
@@ -61,10 +79,10 @@ function mountActiveViewer(descriptor) {
 
   renderFileActionsMenu(actionMenu, descriptor, {
     onShowFileInfo: (desc) => openFileInfoModal(desc),
-    onCloseMenu: () => actionMenu?.classList.remove('is-open')
+    onCloseMenu: () => closeActionSheet()
   });
 
-  workspaceCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  workspaceCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function syncRouteUI(route) {
@@ -124,9 +142,25 @@ export function initApp() {
   registerServiceWorker();
   initAppFullscreenButton();
 
+  // Slide-out Hamburger Drawer Controls
+  const drawerToggleBtn = document.getElementById('btn-drawer-toggle');
+  const drawerCloseBtn = document.getElementById('btn-drawer-close');
+  const drawer = document.getElementById('app-nav-drawer');
+  const drawerBackdrop = document.getElementById('drawer-backdrop');
+
+  drawerToggleBtn?.addEventListener('click', () => {
+    const isOpen = drawer?.classList.toggle('is-open');
+    drawerBackdrop?.classList.toggle('is-open', Boolean(isOpen));
+    drawerToggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  });
+
+  drawerCloseBtn?.addEventListener('click', closeNavDrawer);
+  drawerBackdrop?.addEventListener('click', closeNavDrawer);
+
   qsa('[data-nav]').forEach((btn) => {
     btn.addEventListener('click', () => {
       navigateTo(btn.dataset.nav);
+      closeNavDrawer();
     });
   });
 
@@ -151,25 +185,25 @@ export function initApp() {
     }
     const workspaceCard = document.getElementById('active-viewer-workspace');
     if (workspaceCard) workspaceCard.style.display = 'none';
+    closeActionSheet();
   });
 
   const installBtn = document.getElementById('btn-install-pwa');
   installBtn?.addEventListener('click', () => triggerInstallFlow());
 
+  // Native Slide-Up Action Bottom Sheet
   const menuToggleBtn = document.getElementById('btn-file-actions-toggle');
   const actionMenu = document.getElementById('file-action-menu');
+  const sheetBackdrop = document.getElementById('action-sheet-backdrop');
+
   menuToggleBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
     const isOpen = actionMenu?.classList.toggle('is-open');
+    sheetBackdrop?.classList.toggle('is-open', Boolean(isOpen));
     menuToggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   });
 
-  document.addEventListener('click', () => {
-    if (actionMenu?.classList.contains('is-open')) {
-      actionMenu.classList.remove('is-open');
-      menuToggleBtn?.setAttribute('aria-expanded', 'false');
-    }
-  });
+  sheetBackdrop?.addEventListener('click', closeActionSheet);
 
   const modalBackdrop = document.getElementById('modal-backdrop');
   const modalCloseBtn = document.getElementById('btn-modal-close');
@@ -180,7 +214,8 @@ export function initApp() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       modalBackdrop?.classList.remove('is-open');
-      actionMenu?.classList.remove('is-open');
+      closeActionSheet();
+      closeNavDrawer();
     }
   });
 
